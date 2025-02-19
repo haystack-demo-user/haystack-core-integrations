@@ -150,7 +150,7 @@ class MistralChatGenerator(OpenAIChatGenerator):
             tool_calls_meta = chunk_payload.meta.get("tool_calls")
             if tool_calls_meta:
                 for delta in tool_calls_meta:
-                    if not delta.id in tool_call_data:
+                    if delta.id not in tool_call_data:
                         tool_call_data[delta.id] = {"id": delta.id, "name": "", "arguments": ""}
 
                     if delta.function:
