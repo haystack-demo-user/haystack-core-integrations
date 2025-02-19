@@ -133,7 +133,7 @@ class MistralChatGenerator(OpenAIChatGenerator):
         )
 
     def _convert_streaming_chunks_to_chat_message(
-            self, chunk: ChatCompletionChunk, chunks: List[StreamingChunk]
+        self, chunk: ChatCompletionChunk, chunks: List[StreamingChunk]
     ) -> ChatMessage:
         """
         Connects the streaming chunks into a single ChatMessage.
