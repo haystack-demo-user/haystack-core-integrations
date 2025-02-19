@@ -2,11 +2,14 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+import json
 from typing import Any, Callable, Dict, List, Optional
+
+from openai.types.chat import ChatCompletionChunk
 
 from haystack import component, default_to_dict, logging
 from haystack.components.generators.chat import OpenAIChatGenerator
-from haystack.dataclasses import StreamingChunk
+from haystack.dataclasses import ChatMessage, StreamingChunk, ToolCall
 from haystack.tools import Tool
 from haystack.utils import serialize_callable
 from haystack.utils.auth import Secret
@@ -128,3 +131,54 @@ class MistralChatGenerator(OpenAIChatGenerator):
             api_key=self.api_key.to_dict(),
             tools=[tool.to_dict() for tool in self.tools] if self.tools else None,
         )
+
+    def _convert_streaming_chunks_to_chat_message(
+            self, chunk: ChatCompletionChunk, chunks: List[StreamingChunk]
+    ) -> ChatMessage:
+        """
+        Connects the streaming chunks into a single ChatMessage.
+
+        :param chunk: The last chunk returned by the OpenAI API.
+        :param chunks: The list of all `StreamingChunk` objects.
+        """
+        text = "".join([chunk.content for chunk in chunks])
+        tool_calls = []
+
+        # Process tool calls if present in any chunk
+        tool_call_data: Dict[str, Dict[str, str]] = {}  # Track tool calls by ID
+        for chunk_payload in chunks:
+            tool_calls_meta = chunk_payload.meta.get("tool_calls")
+            if tool_calls_meta:
+                for delta in tool_calls_meta:
+                    if not delta.id in tool_call_data:
+                        tool_call_data[delta.id] = {"id": delta.id, "name": "", "arguments": ""}
+
+                    if delta.function:
+                        if delta.function.name:
+                            tool_call_data[delta.id]["name"] = delta.function.name
+                        if delta.function.arguments:
+                            tool_call_data[delta.id]["arguments"] = delta.function.arguments
+
+        # Convert accumulated tool call data into ToolCall objects
+        for call_data in tool_call_data.values():
+            try:
+                arguments = json.loads(call_data["arguments"])
+                tool_calls.append(ToolCall(id=call_data["id"], tool_name=call_data["name"], arguments=arguments))
+            except json.JSONDecodeError:
+                logger.warning(
+                    "Skipping malformed tool call due to invalid JSON. Set `tools_strict=True` for valid JSON. "
+                    "Tool call ID: {_id}, Tool name: {_name}, Arguments: {_arguments}",
+                    _id=call_data["id"],
+                    _name=call_data["name"],
+                    _arguments=call_data["arguments"],
+                )
+
+        meta = {
+            "model": chunk.model,
+            "index": 0,
+            "finish_reason": chunk.choices[0].finish_reason,
+            "completion_start_time": chunks[0].meta.get("received_at"),  # first chunk received
+            "usage": {},  # we don't have usage data for streaming responses
+        }
+
+        return ChatMessage.from_assistant(text=text, tool_calls=tool_calls, meta=meta)
