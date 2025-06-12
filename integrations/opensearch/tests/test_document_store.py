@@ -256,6 +256,30 @@ class TestDocumentStore(CountDocumentsTest, WriteDocumentsTest, DeleteDocumentsT
         assert "2" == res[1].id
         assert "3" == res[2].id
 
+    def test_bm25_retrieval_with_custom_query_empty_filters_dict(
+        self, document_store: OpenSearchDocumentStore, test_documents: List[Document]
+    ):
+        """Test BM25 retrieval with custom query and empty filters dict (should not raise FilterError)."""
+        document_store.write_documents(test_documents)
+
+        custom_query = {
+            "query": {
+                "function_score": {
+                    "query": {"bool": {"must": {"match": {"content": "$query"}}}},
+                    "field_value_factor": {"field": "likes", "factor": 0.1, "modifier": "log1p", "missing": 0},
+                }
+            }
+        }
+
+        # This should work without raising FilterError
+        res = document_store._bm25_retrieval(
+            "functional",
+            top_k=3,
+            custom_query=custom_query,
+            filters={}  # Empty dict should be handled gracefully
+        )
+        assert len(res) == 3
+
     def test_embedding_retrieval(self, document_store_embedding_dim_4_no_emb_returned: OpenSearchDocumentStore):
         docs = [
             Document(content="Most similar document", embedding=[1.0, 1.0, 1.0, 1.0]),
