@@ -385,6 +385,31 @@ class TestDocumentStore(CountDocumentsTest, WriteDocumentsTest, DeleteDocumentsT
         assert len(results) == 1
         assert results[0].content == "Not very similar document with meta field"
 
+    def test_embedding_retrieval_with_custom_query_empty_filters_dict(
+        self, document_store_embedding_dim_4_no_emb_returned: OpenSearchDocumentStore
+    ):
+        """Test embedding retrieval with custom query and empty filters dict (should not raise FilterError)."""
+        docs = [
+            Document(content="Most similar document", embedding=[1.0, 1.0, 1.0, 1.0]),
+            Document(content="2nd best document", embedding=[0.8, 0.8, 0.8, 1.0]),
+        ]
+        document_store_embedding_dim_4_no_emb_returned.write_documents(docs)
+
+        custom_query = {
+            "query": {
+                "bool": {"must": [{"knn": {"embedding": {"vector": "$query_embedding", "k": 3}}}]}
+            }
+        }
+
+        # This should work without raising FilterError
+        results = document_store_embedding_dim_4_no_emb_returned._embedding_retrieval(
+            query_embedding=[0.1, 0.1, 0.1, 0.1], 
+            top_k=2, 
+            filters={},  # Empty dict should be handled gracefully
+            custom_query=custom_query
+        )
+        assert len(results) == 2
+
     def test_embedding_retrieval_query_documents_different_embedding_sizes(
         self, document_store_embedding_dim_4_no_emb_returned: OpenSearchDocumentStore
     ):
