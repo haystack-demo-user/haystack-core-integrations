@@ -685,7 +685,7 @@ class OpenSearchDocumentStore:
                 custom_query,
                 {
                     "$query_embedding": query_embedding,
-                    "$filters": normalize_filters(filters) if filters else None,
+                    "$filters": normalize_filters(filters) if filters and filters != {} else None,
                 },
             )
 
